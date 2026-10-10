@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.star import command_management as management
 from astrbot.core.star import star_manager
 from astrbot.core.star.filter.command import CommandFilter
@@ -27,7 +28,8 @@ def test_permission_matrix(permission, group, admin, isolated):
     event = MagicMock()
     event.get_group_id.return_value = "group" if group else ""
     event.is_admin.return_value = admin
-    event.get_extra.side_effect = {"_session_isolated": isolated}.get
+    event.pipeline = PipelineState()
+    event.pipeline.session_isolated = isolated
     expected = (
         admin
         or permission == "member"
@@ -44,7 +46,7 @@ def test_shared_group_permission_requires_actual_isolation():
     event = MagicMock()
     event.get_group_id.return_value = "group"
     event.is_admin.return_value = False
-    event.get_extra.side_effect = {}.get
+    event.pipeline = PipelineState()
     permission = PermissionTypeFilter(PermissionType.SHARED_GROUP_ADMIN)
     assert not permission.filter(event, {"platform_settings": {"unique_session": True}})
 

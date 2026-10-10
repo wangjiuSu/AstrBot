@@ -35,3 +35,12 @@ class PlatformMetadata:
 
     参考 https://github.com/AstrBotDevs/AstrBot/pull/5045
     """
+
+    support_segmented_reply: bool = True
+    """Whether one reply may be split into several messages (segmented reply)."""
+    support_native_reaction: bool = False
+    """Whether the event class implements a native message reaction in ``react``."""
+    support_forward_message: bool = False
+    """Whether long replies may be wrapped into a forward ``Node`` component."""
+    trusted_source: bool = False
+    """Whether authenticated operator messages bypass allowlist and wake gates."""

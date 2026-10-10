@@ -212,6 +212,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return group
 
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_sender_id()}_{self.get_group_id()}"
+
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
         await self._post_send()

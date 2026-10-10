@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
@@ -14,23 +14,6 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
 from .umo_auto_name import UmoAutoNameRecorder
-
-UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
-    "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "dingtalk": lambda e: e.get_sender_id(),
-    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
-    "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
-    "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
-    "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
-}
-
-
-def build_unique_session_id(event: AstrMessageEvent) -> str | None:
-    platform = event.get_platform_name()
-    builder = UNIQUE_SESSION_ID_BUILDERS.get(platform)
-    return builder(event) if builder else None
 
 
 @register_stage
@@ -84,12 +67,12 @@ class WakingCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         # apply unique session
-        event.set_extra("_session_isolated", False)
+        event.pipeline.session_isolated = False
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
-            sid = build_unique_session_id(event)
+            sid = event.build_unique_session_id()
             if sid:
                 event.session_id = sid
-                event.set_extra("_session_isolated", True)
+                event.pipeline.session_isolated = True
 
         # ignore bot self message
         if (
@@ -151,7 +134,7 @@ class WakingCheckStage(Stage):
             # 检查是否是私聊
             if event.is_private_chat() and (
                 not self.friend_message_needs_wake_prefix
-                or event.get_platform_name() == "webchat"
+                or event.platform_meta.trusted_source
             ):
                 is_wake = True
                 event.is_wake = True
@@ -250,8 +233,8 @@ class WakingCheckStage(Stage):
             activated_handlers,
         )
 
-        event.set_extra("activated_handlers", activated_handlers)
-        event.set_extra("handlers_parsed_params", handlers_parsed_params)
+        event.pipeline.activated_handlers = activated_handlers
+        event.pipeline.handlers_parsed_params = handlers_parsed_params
 
         if is_wake:
             self._umo_auto_name_recorder.schedule(event)

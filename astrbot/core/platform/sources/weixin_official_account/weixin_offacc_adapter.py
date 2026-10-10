@@ -405,6 +405,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             id=self.config.get("id", "weixin_official_account"),
             support_streaming_message=False,
             support_proactive_message=True,
+            support_segmented_reply=False,
         )
 
     @override

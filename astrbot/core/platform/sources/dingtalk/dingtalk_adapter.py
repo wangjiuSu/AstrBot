@@ -159,6 +159,7 @@ class DingtalkPlatformAdapter(Platform):
             id=cast(str, self.config.get("id")),
             support_streaming_message=True,
             support_proactive_message=True,
+            support_segmented_reply=False,
         )
 
     async def convert_msg(

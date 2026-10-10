@@ -752,6 +752,19 @@ class LarkMessageEvent(AstrMessageEvent):
                 fallback_chat_id,
             )
 
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_sender_id()}%{self.get_group_id()}"
+
+    def build_reasoning_component(self, reasoning: str) -> Json:
+        return Json(
+            data={
+                "type": "lark_collapsible_panel_reasoning",
+                "title": "💭 Thinking",
+                "expanded": False,
+                "content": reasoning,
+            },
+        )
+
     async def send(self, message: MessageChain) -> None:
         """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(

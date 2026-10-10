@@ -49,5 +49,5 @@ class PermissionTypeFilter(HandlerFilter):
             and event.get_group_id()
         ):
             # The pipeline marks actual isolation, including platform support.
-            return event.is_admin() or bool(event.get_extra("_session_isolated", False))
+            return event.is_admin() or event.pipeline.session_isolated
         return True

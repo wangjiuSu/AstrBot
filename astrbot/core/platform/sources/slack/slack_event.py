@@ -127,6 +127,9 @@ class SlackMessageEvent(AstrMessageEvent):
 
         return blocks, "" if blocks else text_content
 
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_sender_id()}_{self.get_group_id()}"
+
     async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,

@@ -24,7 +24,7 @@ AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
 def _should_stop_agent(astr_event) -> bool:
-    return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
+    return astr_event.is_stopped() or astr_event.pipeline.agent_stop_requested
 
 
 def _truncate_tool_result(text: str, limit: int = 70) -> str:
@@ -178,8 +178,8 @@ async def run_agent(
                             await stop_watcher
                         except asyncio.CancelledError:
                             pass
-                    astr_event.set_extra("agent_user_aborted", True)
-                    astr_event.set_extra("agent_stop_requested", False)
+                    astr_event.pipeline.agent_user_aborted = True
+                    astr_event.pipeline.agent_stop_requested = False
                     return
 
                 if _should_stop_agent(astr_event):

@@ -229,7 +229,12 @@ class TelegramPlatformAdapter(Platform):
     @override
     def meta(self) -> PlatformMetadata:
         id_ = self.config.get("id") or "telegram"
-        return PlatformMetadata(name="telegram", description="telegram 适配器", id=id_)
+        return PlatformMetadata(
+            name="telegram",
+            description="telegram 适配器",
+            id=id_,
+            support_native_reaction=True,
+        )
 
     @override
     async def run(self) -> None:

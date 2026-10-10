@@ -19,6 +19,7 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
     QQOfficialMessageEvent,
 )
@@ -535,7 +536,7 @@ def test_qqofficial_ws_is_not_excluded_from_segmented_reply():
 
     event = SimpleNamespace(
         get_result=lambda: result,
-        get_platform_name=lambda: "qq_official",
+        platform_meta=PlatformMetadata("qq_official", "test", "qq_official"),
     )
 
     assert stage.is_seg_reply_required(cast(Any, event)) is True
@@ -549,7 +550,12 @@ def test_qqofficial_webhook_remains_excluded_from_segmented_reply():
 
     event = SimpleNamespace(
         get_result=lambda: result,
-        get_platform_name=lambda: "qq_official_webhook",
+        platform_meta=PlatformMetadata(
+            "qq_official_webhook",
+            "test",
+            "qq_official_webhook",
+            support_segmented_reply=False,
+        ),
     )
 
     assert stage.is_seg_reply_required(cast(Any, event)) is False
@@ -602,6 +608,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         unified_msg_origin="qq_official:GroupMessage:group-1",
         get_result=lambda: result,
         get_platform_name=lambda: "qq_official",
+        platform_meta=PlatformMetadata("qq_official", "test", "qq_official"),
         is_stopped=lambda: False,
         get_extra=lambda *_args, **_kwargs: None,
     )

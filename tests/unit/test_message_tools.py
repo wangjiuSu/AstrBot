@@ -8,6 +8,7 @@ import pytest
 from astrbot.core.config import default as config_defaults
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
@@ -32,6 +33,7 @@ def _make_context(
         unified_msg_origin=current_session,
         role=role,
         _has_send_oper=False,
+        pipeline=PipelineState(),
         get_sender_id=lambda: "user-1",
     )
     event.set_extra = lambda key, value: extras.__setitem__(key, value)
@@ -53,6 +55,7 @@ class _DummyRespondEvent:
             "_send_message_to_user_current_session_plain_texts": sent_plain_texts,
         }
         self._result = MessageEventResult().message(result_text)
+        self.pipeline = PipelineState()
         self.send = AsyncMock()
         self.plugins_name = []
 

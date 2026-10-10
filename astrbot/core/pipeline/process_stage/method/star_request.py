@@ -8,7 +8,7 @@ from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.star.star_handler import EventType
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
@@ -24,16 +24,9 @@ class StarRequestSubStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> AsyncGenerator[Any, None]:
-        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers",
-        )
-        handlers_parsed_params: dict[str, dict[str, Any]] = event.get_extra(
-            "handlers_parsed_params",
-        )
-        if not handlers_parsed_params:
-            handlers_parsed_params = {}
+        handlers_parsed_params = event.pipeline.handlers_parsed_params
 
-        for handler in activated_handlers:
+        for handler in event.pipeline.activated_handlers:
             if event.is_stopped():
                 break
             params = handlers_parsed_params.get(handler.handler_full_name, {})

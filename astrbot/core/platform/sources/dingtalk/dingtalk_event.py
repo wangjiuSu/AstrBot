@@ -18,6 +18,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self.client = client
         self.adapter = adapter
 
+    def build_unique_session_id(self) -> str | None:
+        return self.get_sender_id()
+
     async def send(self, message: MessageChain) -> None:
         if not self.adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")

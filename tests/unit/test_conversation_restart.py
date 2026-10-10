@@ -19,6 +19,7 @@ from astrbot.core.config.default import (
     DEFAULT_CONFIG,
 )
 from astrbot.core.message.components import Plain
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.pipeline.waking_check import stage as waking
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
@@ -33,6 +34,13 @@ from astrbot.core.star.filter.permission import (
 from astrbot.core.star.register import star_handler as handler_registration
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import StarHandlerRegistry
+
+
+class _MemberIsolatedEvent(AstrMessageEvent):
+    """Event whose platform isolates each group member under unique_session."""
+
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_sender_id()}_{self.get_group_id()}"
 
 
 @pytest.fixture
@@ -87,6 +95,7 @@ def restart(monkeypatch):
     extras = {}
     event.set_extra.side_effect = extras.__setitem__
     event.get_extra.side_effect = extras.get
+    event.pipeline = PipelineState()
     stop = MagicMock()
     monkeypatch.setattr(commands.active_event_registry, "stop_all", stop)
     return SimpleNamespace(
@@ -113,7 +122,7 @@ async def test_restart_permission_matrix(
     restart.config["platform_settings"] = {
         "unique_session": isolated,
     }
-    restart.extras["_session_isolated"] = isolated
+    restart.event.pipeline.session_isolated = isolated
     handler = restart_handlers[entry]
     permission = next(
         f for f in handler.event_filters if isinstance(f, PermissionTypeFilter)
@@ -127,7 +136,7 @@ async def test_restart_permission_matrix(
         restart.stop.assert_not_called()
         restart.manager.get_curr_conversation_id.assert_not_awaited()
         restart.manager.new_conversation.assert_not_awaited()
-        assert restart.extras == {"_session_isolated": isolated}
+        assert restart.extras == {}
     else:
         restart.stop.assert_called_once_with(
             restart.event.unified_msg_origin, exclude=restart.event
@@ -203,14 +212,17 @@ async def test_restart_permissions_follow_pipeline_isolation(
         message.sender = MessageMember(user_id="member")
         text = "/new" if entry == "new_conv" else "/reset"
         message.message = [Plain(text)]
-        event = AstrMessageEvent(
+        # Platforms whose event class isolates group members under unique_session.
+        isolating = platform in {"aiocqhttp", "qq_official", "qq_official_webhook"}
+        event_cls = _MemberIsolatedEvent if isolating else AstrMessageEvent
+        event = event_cls(
             text, message, PlatformMetadata(platform, "test", "qq"), "group"
         )
         event.send = AsyncMock()
         # A stale marker must never grant access on a shared-group event.
         event.set_extra("_session_isolated", True)
         await profiles[profile].process(event)
-        isolated = enabled and platform in waking.UNIQUE_SESSION_ID_BUILDERS
+        isolated = enabled and isolating
         assert event.get_extra("_session_isolated") is isolated
         assert event.session_id == ("member_group" if isolated else "group")
         allowed = override == "member" or (

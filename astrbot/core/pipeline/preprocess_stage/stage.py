@@ -53,7 +53,6 @@ class PreProcessStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
         # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
-        supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
             self.config.get("platform_specific", {})
@@ -63,7 +62,7 @@ class PreProcessStage(Stage):
         emojis = cfg.get("emojis") or []
         if (
             cfg.get("enable", False)
-            and platform in supported
+            and event.platform_meta.support_native_reaction
             and emojis
             and event.is_at_or_wake_command
         ):

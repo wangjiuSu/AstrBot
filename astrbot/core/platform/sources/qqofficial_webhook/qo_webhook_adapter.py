@@ -163,6 +163,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             description="QQ 机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
             support_proactive_message=True,
+            support_segmented_reply=False,
         )
 
     def create_event(self, message: AstrBotMessage) -> QQOfficialWebhookMessageEvent:

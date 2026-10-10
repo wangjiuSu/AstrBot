@@ -137,14 +137,7 @@ class RespondStage(Stage):
         if self.only_llm_result and not result.is_model_result():
             return False
 
-        if event.get_platform_name() in [
-            "qq_official_webhook",
-            "weixin_official_account",
-            "dingtalk",
-        ]:
-            return False
-
-        return True
+        return bool(event.platform_meta.support_segmented_reply)
 
     def _extract_comp(
         self,
@@ -173,11 +166,11 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
-        if event.get_extra("_streaming_finished", False):
+        if event.pipeline.streaming_finished:
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
-            event.set_extra("_streaming_finished", True)
+            event.pipeline.streaming_finished = True
             return
         if (
             not result.chain

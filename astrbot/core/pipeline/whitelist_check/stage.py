@@ -40,8 +40,8 @@ class WhitelistCheckStage(Stage):
             # 白名单为空，不检查
             return
 
-        if event.get_platform_name() == "webchat":
-            # WebChat 豁免
+        if event.platform_meta.trusted_source:
+            # Local operator platforms (dashboard chat) skip the allowlist.
             return
 
         # 检查是否在白名单

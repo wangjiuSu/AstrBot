@@ -40,6 +40,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
 
         return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
 
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_session_id()}_{self.get_sender_id()}"
+
     async def send(self, message: MessageChain) -> None:
         """发送消息，使用适配器的完整上传和发送逻辑"""
         try:

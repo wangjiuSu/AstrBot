@@ -12,6 +12,16 @@ First, add `fake_platform_adapter.py` and `fake_platform_event.py` to your plugi
 
 ## Platform Adapter
 
+The pipeline reads platform capabilities from the `PlatformMetadata` returned by your adapter's `meta()` method. Set `support_segmented_reply=False` when one reply cannot be split into multiple sends, `support_native_reaction=True` when your event implements native `react()`, and `support_forward_message=True` when long replies may be wrapped in a forward `Node`. Defaults are `True`, `False`, and `False`, respectively. Keep `trusted_source=False` for external messaging platforms: setting it to `True` bypasses allowlist and private-message wake-prefix checks and is reserved for authenticated operator interfaces.
+
+Platform-specific event behavior belongs in these `AstrMessageEvent` hooks:
+
+- `build_unique_session_id()` returns a per-member group session ID, or `None` to retain the group session. Preserve existing ID formats when migrating an adapter. Adapters that previously depended on the pipeline's platform-name table, including third-party Matrix adapters, must implement this hook themselves.
+- `build_reasoning_component(reasoning)` returns the component used to display reasoning; the default is plain text.
+- `on_pipeline_finished()` runs after normal pipeline completion, including early stops. The default does nothing; streaming clients that need an end-of-turn signal should send it here.
+
+Core stages use `event.pipeline` for typed pipeline fields, such as `provider_request`, `activated_handlers`, and `agent_stop_requested`. The legacy `set_extra()`, `get_extra()`, and `clear_extra()` APIs share the same storage, including dictionary access through `get_extra()` without a key. Plugin-specific fields continue to use extras.
+
 Assume FakePlatform's client SDK looks like this:
 
 ```py

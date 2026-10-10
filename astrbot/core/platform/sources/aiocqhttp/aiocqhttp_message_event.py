@@ -181,6 +181,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
                 await asyncio.sleep(0.5)
 
+    def build_unique_session_id(self) -> str | None:
+        return f"{self.get_sender_id()}_{self.get_group_id()}"
+
     async def send(self, message: MessageChain) -> None:
         """发送消息"""
         event = getattr(self.message_obj, "raw_message", None)

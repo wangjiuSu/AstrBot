@@ -2,7 +2,6 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -30,16 +29,13 @@ class ProcessStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
-        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers",
-        )
         # 有插件 Handler 被激活
-        if activated_handlers:
+        if event.pipeline.activated_handlers:
             async for resp in self.star_request_sub_stage.process(event):
                 # 生成器返回值处理
                 if isinstance(resp, ProviderRequest):
                     # Handler 的 LLM 请求
-                    event.set_extra("provider_request", resp)
+                    event.pipeline.provider_request = resp
                     _t = False
                     async for _ in self.agent_sub_stage.process(event):
                         _t = True
@@ -53,14 +49,6 @@ class ProcessStage(Stage):
         if not self.ctx.astrbot_config["provider_settings"].get("enable", True):
             return
 
-        if (
-            not event._has_send_oper
-            and event.is_at_or_wake_command
-            and not event.call_llm
-        ):
-            # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
-            if (
-                event.get_result() and not event.is_stopped()
-            ) or not event.get_result():
-                async for _ in self.agent_sub_stage.process(event):
-                    yield
+        if event.should_run_default_agent():
+            async for _ in self.agent_sub_stage.process(event):
+                yield

@@ -83,7 +83,7 @@ class ActiveEventRegistry:
         count = 0
         for event in list(self._events.get(umo, [])):
             if event is not exclude:
-                event.set_extra("agent_stop_requested", True)
+                event.pipeline.agent_stop_requested = True
                 callback = self._agent_stop_callbacks.get(event)
                 if callback:
                     callback()

@@ -24,6 +24,7 @@ from astrbot.core.message.components import (
     Reply,
 )
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
@@ -55,6 +56,9 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        """Shared storage for pipeline state, plugins and per-request options."""
+        self._pipeline = PipelineState(self._extras)
+        """Typed state the built-in pipeline stages hand to each other."""
         self._force_stopped: bool = False
         """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
@@ -207,6 +211,49 @@ class AstrMessageEvent(abc.ABC):
             return sender.user_id
         return ""
 
+    @property
+    def pipeline(self) -> PipelineState:
+        """Return typed state bound to this event's current extra dictionary.
+
+        Plugins may shallow-copy an event and then replace its extra dictionary.
+        Rebind the view lazily so the copied event cannot modify the original.
+
+        Returns:
+            Typed access to this event's pipeline fields.
+        """
+        if self._pipeline._extras is not self._extras:
+            self._pipeline = PipelineState(self._extras)
+        return self._pipeline
+
+    def build_unique_session_id(self) -> str | None:
+        """Session id used when ``unique_session`` isolates group members.
+
+        Returns:
+            Per-member session id in the platform's historical format, or
+            ``None`` to keep the group-wide session. Platform event classes
+            override this; the base keeps the group session.
+        """
+        return None
+
+    def build_reasoning_component(self, reasoning: str) -> BaseMessageComponent:
+        """Message component that shows model reasoning ahead of the reply.
+
+        Args:
+            reasoning: Reasoning text produced by the model.
+
+        Returns:
+            A ``Plain`` block by default. Platforms with a richer layout
+            (collapsible panels, cards) override this.
+        """
+        return Plain(f"🤔 思考: {reasoning}\n\n────\n")
+
+    async def on_pipeline_finished(self) -> None:
+        """Hook run by the scheduler once every pipeline stage has finished.
+
+        Default is a no-op. Platforms that must signal end-of-turn to their
+        client override this.
+        """
+
     def get_sender_name(self) -> str:
         """获取消息发送者的名称。(可能会返回空字符串)"""
         sender = getattr(self.message_obj, "sender", None)
@@ -220,7 +267,12 @@ class AstrMessageEvent(abc.ABC):
         return str(nickname)
 
     def set_extra(self, key, value) -> None:
-        """设置额外的信息。"""
+        """Store extra information, including legacy pipeline fields.
+
+        Args:
+            key: Extra field name.
+            value: Value to store.
+        """
         self._extras[key] = value
 
     def get_extra(self, key: str | None = None, default=None) -> Any:
@@ -375,6 +427,21 @@ class AstrMessageEvent(abc.ABC):
         只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
         """
         self.call_llm = call_llm
+
+    def should_run_default_agent(self) -> bool:
+        """Whether the process stage should hand this event to the main agent.
+
+        The agent runs when the bot was addressed (mention, wake prefix or
+        private chat), nothing has been sent yet, no plugin disabled the
+        default LLM path, and either no result was set or the event is still
+        propagating.
+
+        Returns:
+            ``True`` when the default agent should run for this event.
+        """
+        if self._has_send_oper or not self.is_at_or_wake_command or self.call_llm:
+            return False
+        return not self._result or not self.is_stopped()
 
     def get_result(self) -> MessageEventResult | None:
         """获取消息事件的结果。"""

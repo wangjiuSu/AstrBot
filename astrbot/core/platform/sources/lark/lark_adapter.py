@@ -547,6 +547,7 @@ class LarkPlatformAdapter(Platform):
             description="飞书机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
             support_streaming_message=True,
+            support_native_reaction=True,
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1) -> None:

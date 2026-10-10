@@ -5,6 +5,7 @@ from astrbot.core.pipeline.process_stage.follow_up import (
     register_active_runner,
     unregister_active_runner,
 )
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.utils.active_event_registry import (
     ActiveEventRegistry,
     active_event_registry,
@@ -16,16 +17,7 @@ class StubEvent:
 
     def __init__(self, umo: str) -> None:
         self.unified_msg_origin = umo
-        self.extras: dict[str, object] = {}
-
-    def set_extra(self, key: str, value: object) -> None:
-        """Store an event extra.
-
-        Args:
-            key: Extra field name.
-            value: Extra field value.
-        """
-        self.extras[key] = value
+        self.pipeline = PipelineState()
 
 
 def test_request_agent_stop_invokes_registered_callback() -> None:
@@ -39,7 +31,7 @@ def test_request_agent_stop_invokes_registered_callback() -> None:
     stopped_count = registry.request_agent_stop_all(event.unified_msg_origin)
 
     assert stopped_count == 1
-    assert event.extras["agent_stop_requested"] is True
+    assert event.pipeline.agent_stop_requested is True
     callback.assert_called_once_with()
 
 

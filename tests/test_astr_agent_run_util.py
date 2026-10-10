@@ -6,10 +6,14 @@ import pytest
 from astrbot.core.agent.response import AgentResponse
 from astrbot.core.astr_agent_run_util import _simulated_stream_tts, run_agent
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.pipeline.state import PipelineState
 
 
 class _FakeEvent:
     """Minimal event surface used by the agent stream bridge."""
+
+    def __init__(self) -> None:
+        self.pipeline = PipelineState()
 
     def is_stopped(self) -> bool:
         return False

@@ -162,6 +162,10 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
+    async def on_pipeline_finished(self) -> None:
+        # An empty send tells the dashboard client that this turn is over.
+        await self.send(None)
+
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
         follow_up_capture = self.get_extra("_follow_up_captured")

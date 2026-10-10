@@ -46,6 +46,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         self.only_use_webhook_url_to_send = only_use_webhook_url_to_send
         self.long_connection_sender = long_connection_sender
 
+    async def on_pipeline_finished(self) -> None:
+        """Signal the end of this turn to the streaming client."""
+        await self.send(None)
+
     async def _mark_stream_complete(self, stream_id: str) -> None:
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
         await back_queue.put(

@@ -12,6 +12,16 @@ AstrBot 支持以插件的形式接入平台适配器，你可以自行接入 As
 
 ## 平台适配器
 
+流水线从适配器 `meta()` 返回的 `PlatformMetadata` 读取平台能力。无法将一次回复拆成多次发送的平台应设置 `support_segmented_reply=False`；事件实现了原生 `react()` 时设置 `support_native_reaction=True`；支持将长回复包装成转发 `Node` 时设置 `support_forward_message=True`。这三个字段的默认值依次为 `True`、`False`、`False`。外部聊天平台应保持 `trusted_source=False`：设为 `True` 会跳过白名单和私聊唤醒前缀检查，仅适用于已认证的操作者界面。
+
+平台特有的事件行为通过以下 `AstrMessageEvent` 方法实现：
+
+- `build_unique_session_id()` 返回群内按成员隔离的会话 ID，返回 `None` 则沿用群会话。迁移适配器时保留原有 ID 格式，避免历史会话失联。此前依赖流水线内平台名称表的适配器（包括第三方 Matrix 适配器）需自行实现此方法。
+- `build_reasoning_component(reasoning)` 返回展示思考内容的消息组件，默认使用纯文本。
+- `on_pipeline_finished()` 在流水线正常结束（包括提前停止）后调用。默认不执行操作；需要回合结束信号的流式客户端应在这里发送。
+
+核心阶段通过 `event.pipeline` 访问 `provider_request`、`activated_handlers`、`agent_stop_requested` 等有类型的流水线字段。旧的 `set_extra()`、`get_extra()` 和 `clear_extra()` 与其共用存储；不传键调用 `get_extra()` 取得的字典也包含这些字段。插件自己的字段仍使用 extras。
+
 假设 FakePlatform 的客户端 SDK 是这样：
 
 ```py

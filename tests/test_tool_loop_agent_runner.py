@@ -22,6 +22,7 @@ from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.pipeline.state import PipelineState
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -1787,6 +1788,7 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
     event = MagicMock()
     event.is_stopped.return_value = False
     event.get_extra.return_value = None
+    event.pipeline = PipelineState()
     event.get_platform_name.return_value = "lark"
     await runner.reset(
         provider=provider,
@@ -1850,6 +1852,7 @@ async def test_normal_streaming_reply_is_not_duplicated_by_stream_bridge(
     event = MagicMock()
     event.is_stopped.return_value = False
     event.get_extra.return_value = None
+    event.pipeline = PipelineState()
     event.get_platform_name.return_value = "lark"
     await runner.reset(
         provider=mock_provider,
@@ -2309,6 +2312,7 @@ async def test_step_notices_reach_model_once_per_threshold(
     event = MagicMock()
     event.is_stopped.return_value = False
     event.get_extra.return_value = None
+    event.pipeline = PipelineState()
     event.get_platform_name.return_value = "test"
     event.get_platform_id.return_value = "test"
     event.send = AsyncMock()
