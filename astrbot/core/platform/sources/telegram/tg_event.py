@@ -22,7 +22,6 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
-from astrbot.core.utils.metrics import Metric
 
 
 def _is_gif(path: str) -> bool:
@@ -617,11 +616,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 user_name, message_thread_id, payload, generator
             )
 
-        # 内联父类 send_streaming 的副作用（避免传入已消费的 generator）
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
-        )
-        self._has_send_oper = True
+        self.mark_sent()
 
     async def _send_streaming_draft(
         self,

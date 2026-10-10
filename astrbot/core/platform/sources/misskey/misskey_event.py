@@ -1,10 +1,5 @@
-import asyncio
-import re
-from collections.abc import AsyncGenerator
-
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 
 from .misskey_utils import (
@@ -128,42 +123,6 @@ class MisskeyPlatformEvent(AstrMessageEvent):
 
         except Exception as e:
             logger.error(f"[MisskeyEvent] 发送失败: {e}")
-
-    async def send_streaming(
-        self,
-        generator: AsyncGenerator[MessageChain, None],
-        use_fallback: bool = False,
-    ):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
-        async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)  # 限速
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(
         self,

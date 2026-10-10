@@ -79,15 +79,6 @@ class WeixinOCMessageEvent(AstrMessageEvent):
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
 
         buffer = ""
@@ -102,4 +93,5 @@ class WeixinOCMessageEvent(AstrMessageEvent):
                 buffer += component.text
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
+        self.mark_sent()
+        return None

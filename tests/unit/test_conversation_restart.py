@@ -36,7 +36,14 @@ from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import StarHandlerRegistry
 
 
-class _MemberIsolatedEvent(AstrMessageEvent):
+class _SharedGroupEvent(AstrMessageEvent):
+    """Event whose platform keeps one session per group."""
+
+    async def send(self, message):
+        await super().send(message)
+
+
+class _MemberIsolatedEvent(_SharedGroupEvent):
     """Event whose platform isolates each group member under unique_session."""
 
     def build_unique_session_id(self) -> str | None:
@@ -214,7 +221,7 @@ async def test_restart_permissions_follow_pipeline_isolation(
         message.message = [Plain(text)]
         # Platforms whose event class isolates group members under unique_session.
         isolating = platform in {"aiocqhttp", "qq_official", "qq_official_webhook"}
-        event_cls = _MemberIsolatedEvent if isolating else AstrMessageEvent
+        event_cls = _MemberIsolatedEvent if isolating else _SharedGroupEvent
         event = event_cls(
             text, message, PlatformMetadata(platform, "test", "qq"), "group"
         )

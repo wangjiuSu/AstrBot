@@ -20,6 +20,8 @@ AstrBot 支持以插件的形式接入平台适配器，你可以自行接入 As
 - `build_reasoning_component(reasoning)` 返回展示思考内容的消息组件，默认使用纯文本。
 - `on_pipeline_finished()` 在流水线正常结束（包括提前停止）后调用。默认不执行操作；需要回合结束信号的流式客户端应在这里发送。
 
+出站方向，事件类必须实现 `send(message)`（基类将其声明为抽象方法，漏写会在创建事件时报错），并在发送完成后 `await super().send(message)` 记录发送。`send_streaming()` 不必实现：基类默认把流式分片攒成一条消息经 `send()` 发出，`use_fallback=True` 时按完整句子逐段发送。只有平台原生支持流式输出时才覆盖它，自行消费生成器并在结束后调用 `mark_sent()`。
+
 核心阶段通过 `event.pipeline` 访问 `provider_request`、`activated_handlers`、`agent_stop_requested` 等有类型的流水线字段。旧的 `set_extra()`、`get_extra()` 和 `clear_extra()` 与其共用存储；不传键调用 `get_extra()` 取得的字典也包含这些字段。插件自己的字段仍使用 extras。
 
 假设 FakePlatform 的客户端 SDK 是这样：

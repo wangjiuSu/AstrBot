@@ -17,13 +17,18 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderRequest
 
 
+class _Event(AstrMessageEvent):
+    async def send(self, message):
+        await super().send(message)
+
+
 def _event() -> AstrMessageEvent:
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE
     message.self_id = "bot"
     message.sender = MessageMember(user_id="member")
     message.message = [Plain("hi")]
-    return AstrMessageEvent("hi", message, PlatformMetadata("x", "x", "x"), "member")
+    return _Event("hi", message, PlatformMetadata("x", "x", "x"), "member")
 
 
 def test_set_extra_with_legacy_key_lands_on_typed_state():

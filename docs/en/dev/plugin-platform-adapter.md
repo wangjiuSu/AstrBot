@@ -20,6 +20,8 @@ Platform-specific event behavior belongs in these `AstrMessageEvent` hooks:
 - `build_reasoning_component(reasoning)` returns the component used to display reasoning; the default is plain text.
 - `on_pipeline_finished()` runs after normal pipeline completion, including early stops. The default does nothing; streaming clients that need an end-of-turn signal should send it here.
 
+Outbound, the event class must implement `send(message)` (the base class declares it abstract, so a missing implementation fails when the event is created) and `await super().send(message)` once delivery is done so the send is recorded. `send_streaming()` is optional: the base class buffers the stream into one message delivered through `send()`, or sends finished sentences as they arrive when `use_fallback=True`. Override it only when the platform streams natively, consume the generator yourself and call `mark_sent()` when the stream has been delivered.
+
 Core stages use `event.pipeline` for typed pipeline fields, such as `provider_request`, `activated_handlers`, and `agent_stop_requested`. The legacy `set_extra()`, `get_extra()`, and `clear_extra()` APIs share the same storage, including dictionary access through `get_extra()` without a key. Plugin-specific fields continue to use extras.
 
 Assume FakePlatform's client SDK looks like this:

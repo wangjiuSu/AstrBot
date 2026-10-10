@@ -213,28 +213,17 @@ class KookEvent(AstrMessageEvent):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ):
-        """Deliver a streaming reply as one buffered KOOK message.
+    ) -> None:
+        """Deliver a streaming reply as one buffered message.
 
-        KOOK messages are not edited incrementally here, so every chunk is
-        collected first and sent in a single call. Without this override the
-        base class only records a metric and the reply is silently dropped.
+        KOOK messages are not edited incrementally here, so the stream is
+        always delivered as a single message. ``use_fallback`` is ignored.
 
         Args:
-            generator: Chunks of the reply as they are produced.
-            use_fallback: Ignored; KOOK always buffers.
+            generator: Reply chunks as the model produces them.
+            use_fallback: Ignored; this platform always buffers.
         """
-        buffer: MessageChain | None = None
-        async for chain in generator:
-            if buffer is None:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if buffer is None:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+        await super().send_streaming(generator, use_fallback=False)
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets KOOK channel and guild member information.

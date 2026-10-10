@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from astrbot import logger
@@ -31,16 +32,18 @@ class DingtalkMessageEvent(AstrMessageEvent):
         )
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
-        # 钉钉统一回退为缓冲发送：最终发送仍使用新的 HTTP 消息接口。
-        buffer = None
-        async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
+    ) -> None:
+        """Deliver a streaming reply as one buffered message.
+
+        DingTalk replies go through one HTTP message call, so the stream is
+        always delivered as a single message. ``use_fallback`` is ignored.
+
+        Args:
+            generator: Reply chunks as the model produces them.
+            use_fallback: Ignored; this platform always buffers.
+        """
+        await super().send_streaming(generator, use_fallback=False)

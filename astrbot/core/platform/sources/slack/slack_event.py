@@ -1,6 +1,4 @@
 import asyncio
-import re
-from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import cast
 
@@ -175,42 +173,6 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
 
         await super().send(message)
-
-    async def send_streaming(
-        self,
-        generator: AsyncGenerator,
-        use_fallback: bool = False,
-    ):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
-        async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)  # 限速
-
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets Slack channel information and all visible members.

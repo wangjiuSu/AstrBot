@@ -256,7 +256,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         },
                     },
                 )
-                await super().send_streaming(generator, use_fallback)
+                self.mark_sent()
                 return
 
             increment_plain = ""
@@ -301,7 +301,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
-            await super().send_streaming(generator, use_fallback)
+            self.mark_sent()
             return
 
         if self.only_use_webhook_url_to_send and self.webhook_client:
@@ -311,7 +311,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             merged_chain.squash_plain()
             await self.webhook_client.send_message_chain(merged_chain)
             await self._mark_stream_complete(stream_id)
-            await super().send_streaming(generator, use_fallback)
+            self.mark_sent()
             return
 
         # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，按间隔推送
@@ -383,4 +383,4 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "session_id": stream_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        self.mark_sent()

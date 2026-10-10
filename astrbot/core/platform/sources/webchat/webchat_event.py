@@ -264,4 +264,4 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "message_id": message_id,
             },
         )
-        await super().send_streaming(generator, use_fallback)
+        self.mark_sent()

@@ -1,5 +1,6 @@
 import asyncio
 import os
+from collections.abc import AsyncGenerator
 
 from wechatpy.enterprise import WeChatClient
 from wechatpy.exceptions import WeChatClientException
@@ -298,15 +299,18 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
-        buffer = None
-        async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
+    ) -> None:
+        """Deliver a streaming reply as one buffered message.
+
+        WeCom replies are delivered as a single message once the stream ends.
+        ``use_fallback`` is ignored.
+
+        Args:
+            generator: Reply chunks as the model produces them.
+            use_fallback: Ignored; this platform always buffers.
+        """
+        await super().send_streaming(generator, use_fallback=False)

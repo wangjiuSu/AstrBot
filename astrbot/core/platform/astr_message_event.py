@@ -34,6 +34,10 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
+# A run of text ending in sentence punctuation; used to flush complete
+# sentences while a reply is still streaming.
+_SENTENCE_PATTERN = re.compile(r"[^。？！~…]+[。？！~…]+")
+
 
 class AstrMessageEvent(abc.ABC):
     def __init__(
@@ -339,14 +343,49 @@ class AstrMessageEvent(abc.ABC):
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
     ) -> None:
-        """发送流式消息到消息平台，使用异步生成器。
-        目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp。
+        """Deliver a streaming reply on a platform without native streaming.
+
+        The default collects the stream and delivers it through ``send``.
+        With ``use_fallback`` (the ``realtime_segmenting`` strategy) finished
+        sentences go out as they arrive and non-text components are sent at
+        once; otherwise the whole reply is sent as one message when the
+        stream ends. Platforms with native streaming override this method,
+        consume the generator themselves and call ``mark_sent`` at the end.
+
+        Args:
+            generator: Reply chunks as the model produces them.
+            use_fallback: Send completed sentences as they arrive instead of
+                one buffered message.
         """
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
-        )
-        self._has_send_oper = True
+        if not use_fallback:
+            buffer: MessageChain | None = None
+            async for chain in generator:
+                if buffer is None:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if buffer is None:
+                return
+            buffer.squash_plain()
+            await self.send(buffer)
+            return
+
+        text = ""
+        async for chain in generator:
+            if not isinstance(chain, MessageChain):
+                continue
+            for component in chain.chain:
+                if isinstance(component, Plain):
+                    text += component.text
+                    if any(p in text for p in "。？！~…"):
+                        text = await self.process_buffer(text, _SENTENCE_PATTERN)
+                else:
+                    await self.send(MessageChain([component]))
+                    await asyncio.sleep(1.5)  # Rate limit between sends.
+        text = text.strip()
+        if text:
+            await self.send(MessageChain([Plain(text)]))
+        self.mark_sent()
 
     async def send_typing(self) -> None:
         """发送输入中状态。
@@ -547,14 +586,28 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
+    @abc.abstractmethod
     async def send(self, message: MessageChain) -> None:
-        """发送消息到消息平台。
+        """Deliver a message chain to the platform.
+
+        Every platform event class must implement this. Translate the chain
+        into the platform payload, then ``await super().send(message)`` so the
+        send is recorded.
 
         Args:
-            message (MessageChain): 消息链，具体使用方式请参考文档。
-
+            message: Components to deliver, in order.
         """
-        # Leverage BLAKE2 hash function to generate a non-reversible hash of the sender ID for privacy.
+        self.mark_sent()
+
+    def mark_sent(self) -> None:
+        """Record that this event delivered something to the platform.
+
+        Uploads the send metric and sets the sent flag that the process stage
+        checks before running the default agent. ``send`` and the default
+        ``send_streaming`` call this; platforms that stream through their own
+        client call it once the stream has been delivered.
+        """
+        # BLAKE2 keeps the sender id non-reversible in the metric payload.
         hash_obj = hashlib.blake2b(self.get_sender_id().encode("utf-8"), digest_size=16)
         sid = str(uuid.UUID(bytes=hash_obj.digest()))
         asyncio.create_task(

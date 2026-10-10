@@ -38,6 +38,11 @@ from astrbot.core.utils import image_input
 from astrbot.core.utils import media_utils as media
 
 
+class _Event(AstrMessageEvent):
+    async def send(self, message):
+        await super().send(message)
+
+
 def make_event(parts=None, text="hello", session="images"):
     message = AstrBotMessage()
     message.message = parts or [Plain(text=text)]
@@ -45,7 +50,7 @@ def make_event(parts=None, text="hello", session="images"):
     message.type = MessageType.FRIEND_MESSAGE
     message.sender = MessageMember(user_id="user", nickname="User")
     message.self_id = "bot"
-    event = AstrMessageEvent(
+    event = _Event(
         text,
         message,
         PlatformMetadata(name="test", id="test", description="test"),

@@ -35,6 +35,11 @@ PIPELINE_DIR = Path(__file__).resolve().parents[2] / "astrbot" / "core" / "pipel
 ADAPTER_NAMES = sorted(BUILTIN_ADAPTER_MODULES) + ["webchat"]
 
 
+class _Event(AstrMessageEvent):
+    async def send(self, message):
+        await super().send(message)
+
+
 def _event(meta: PlatformMetadata, *, group: bool = True) -> AstrMessageEvent:
     message = AstrBotMessage()
     message.type = MessageType.GROUP_MESSAGE if group else MessageType.FRIEND_MESSAGE
@@ -42,7 +47,7 @@ def _event(meta: PlatformMetadata, *, group: bool = True) -> AstrMessageEvent:
     message.self_id = "bot"
     message.sender = MessageMember(user_id="member")
     message.message = [Plain("hi")]
-    event = AstrMessageEvent("hi", message, meta, "group" if group else "member")
+    event = _Event("hi", message, meta, "group" if group else "member")
     event.send = AsyncMock()
     return event
 
@@ -136,7 +141,7 @@ async def test_waking_private_chat_honours_trusted_source():
 
 @pytest.mark.asyncio
 async def test_waking_unique_session_uses_event_hook():
-    class Isolating(AstrMessageEvent):
+    class Isolating(_Event):
         def build_unique_session_id(self):
             return f"{self.get_sender_id()}#{self.get_group_id()}"
 

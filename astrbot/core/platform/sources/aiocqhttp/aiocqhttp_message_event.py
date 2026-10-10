@@ -1,6 +1,4 @@
 import asyncio
-import re
-from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
 
@@ -199,43 +197,6 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             session_id=session_id,
         )
         await super().send(message)
-
-    async def send_streaming(
-        self,
-        generator: AsyncGenerator,
-        use_fallback: bool = False,
-    ):
-        if not use_fallback:
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
-                return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
-
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
-
-        async for chain in generator:
-            if isinstance(chain, MessageChain):
-                for comp in chain.chain:
-                    if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
-                    else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)  # 限速
-
-        buffer = buffer.strip()
-        if buffer:
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         """Get OneBot group details while preserving inbound data on failures.

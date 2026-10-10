@@ -243,7 +243,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         """流式输出仅支持消息列表私聊（C2C），其他消息源退化为普通发送"""
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
-        await super().send_streaming(generator, use_fallback)
+        self.mark_sent()
         # QQ C2C 流式协议：开始/中间分片使用 state=1，结束分片使用 state=10
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次发送分片的时间

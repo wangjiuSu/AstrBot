@@ -37,7 +37,6 @@ from astrbot.core.utils.media_utils import (
     convert_video_format,
     get_media_duration,
 )
-from astrbot.core.utils.metrics import Metric
 
 
 class LarkMessageEvent(AstrMessageEvent):
@@ -1158,24 +1157,6 @@ class LarkMessageEvent(AstrMessageEvent):
         else:
             logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
 
-    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
-        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
-        buffer = None
-        async for chain in generator:
-            if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-
-        if buffer:
-            buffer.squash_plain()
-            await self.send(buffer)
-
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-        )
-        self._has_send_oper = True
-
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果。
 
@@ -1224,10 +1205,7 @@ class LarkMessageEvent(AstrMessageEvent):
             if buffer:
                 buffer.squash_plain()
                 await self.send(buffer)
-            asyncio.create_task(
-                Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-            )
-            self._has_send_oper = True
+            self.mark_sent()
 
         async def _flush_and_close_card() -> None:
             """补发最终文本并关闭当前卡片的流式模式。"""
@@ -1301,18 +1279,9 @@ class LarkMessageEvent(AstrMessageEvent):
         # If no text was produced at all, no card was created
         if card_id is None:
             if not fallback_used:
-                asyncio.create_task(
-                    Metric.upload(
-                        msg_event_tick=1, adapter_name=self.platform_meta.name
-                    )
-                )
-                self._has_send_oper = True
+                self.mark_sent()
             return
 
         await _flush_and_close_card()
 
-        # 内联父类 send_streaming 的副作用
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
-        )
-        self._has_send_oper = True
+        self.mark_sent()

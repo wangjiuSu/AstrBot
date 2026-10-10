@@ -350,7 +350,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"Satori 流式消息发送异常: {e}")
 
-        return await super().send_streaming(generator, use_fallback)
+        self.mark_sent()
+        return None
 
     async def _convert_component_to_satori(self, component) -> str:
         """将单个消息组件转换为 Satori 格式"""
