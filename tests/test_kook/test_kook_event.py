@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -285,3 +286,45 @@ async def test_kook_get_group_returns_basic_group_when_lookup_fails():
     group = await event.get_group()
 
     assert group == Group(group_id="channel-1", group_name="cached-channel")
+
+
+@pytest.mark.asyncio
+async def test_kook_send_streaming_buffers_chunks_into_one_message():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "hello",
+        mock_astrbot_message(),
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "test",
+        client,
+    )
+
+    async def chunks():
+        yield MessageChain([Plain("Hel")])
+        yield MessageChain([Plain("lo "), Plain("world")])
+
+    await event.send_streaming(chunks())
+
+    client.send_text.assert_awaited_once()
+    assert client.send_text.await_args.args[1] == "Hello world"
+    assert event._has_send_oper is True
+
+
+@pytest.mark.asyncio
+async def test_kook_send_streaming_with_empty_generator_sends_nothing():
+    client = mock_kook_client("", "")
+    event = KookEvent(
+        "hello",
+        mock_astrbot_message(),
+        PlatformMetadata(name="kook", id="kook", description="KOOK"),
+        "test",
+        client,
+    )
+
+    async def chunks():
+        if False:
+            yield MessageChain([])
+
+    await event.send_streaming(chunks())
+
+    client.send_text.assert_not_awaited()

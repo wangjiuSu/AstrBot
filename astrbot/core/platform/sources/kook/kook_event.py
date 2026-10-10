@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import Coroutine
+from collections.abc import AsyncGenerator, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -208,6 +208,33 @@ class KookEvent(AstrMessageEvent):
             logger.error(f"[kook] {err_msg}")
 
         await super().send(message)
+
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
+    ):
+        """Deliver a streaming reply as one buffered KOOK message.
+
+        KOOK messages are not edited incrementally here, so every chunk is
+        collected first and sent in a single call. Without this override the
+        base class only records a metric and the reply is silently dropped.
+
+        Args:
+            generator: Chunks of the reply as they are produced.
+            use_fallback: Ignored; KOOK always buffers.
+        """
+        buffer: MessageChain | None = None
+        async for chain in generator:
+            if buffer is None:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if buffer is None:
+            return None
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets KOOK channel and guild member information.
