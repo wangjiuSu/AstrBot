@@ -17,16 +17,30 @@ class FakeEvent:
         self,
         session_id: str = session_id,
         unified_msg_origin: str = unified_msg_origin,
+        is_at_or_wake_command: bool = True,
+        messages: list | None = None,
     ) -> None:
         """Initialize a fake event with scoped and unscoped session IDs.
 
         Args:
             session_id: Platform-local session identifier.
             unified_msg_origin: Platform-scoped message origin.
+            is_at_or_wake_command: Whether the message addressed the bot.
+            messages: Message chain; defaults to one text segment.
         """
         self.session_id = session_id
         self.unified_msg_origin = unified_msg_origin
+        self.is_at_or_wake_command = is_at_or_wake_command
+        self.messages = ["hello"] if messages is None else messages
         self.stopped = False
+
+    def get_messages(self) -> list:
+        """Return the message chain.
+
+        Returns:
+            Message components of this event.
+        """
+        return self.messages
 
     def stop_event(self) -> None:
         """Stop event propagation for discard-strategy compatibility."""
@@ -61,6 +75,46 @@ async def test_different_platforms_do_not_share_rate_limit_state():
     assert not second_event.stopped
     assert set(limiter.event_timestamps) == expected_keys
     assert set(limiter.locks) == expected_keys
+
+
+@pytest.mark.asyncio
+async def test_overheard_group_messages_do_not_consume_quota():
+    """Ensure messages not addressed to the bot leave the quota for real requests."""
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.rate_limit_count = 1
+    limiter.rate_limit_time = timedelta(seconds=60)
+    limiter.rl_strategy = "discard"
+
+    for _ in range(5):
+        overheard = FakeEvent(is_at_or_wake_command=False)
+        await limiter.process(overheard)
+        assert not overheard.stopped
+
+    addressed = FakeEvent()
+    await limiter.process(addressed)
+    assert not addressed.stopped
+
+    second = FakeEvent()
+    await limiter.process(second)
+    assert second.stopped
+
+
+@pytest.mark.asyncio
+async def test_empty_notices_do_not_consume_quota():
+    """Ensure typing notices in a private chat leave the quota for messages."""
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.rate_limit_count = 1
+    limiter.rate_limit_time = timedelta(seconds=60)
+    limiter.rl_strategy = "discard"
+
+    for _ in range(8):
+        typing = FakeEvent(messages=[])
+        await limiter.process(typing)
+        assert not typing.stopped
+
+    message = FakeEvent()
+    await limiter.process(message)
+    assert not message.stopped
 
 
 @pytest.mark.asyncio

@@ -54,6 +54,13 @@ class RateLimitStage(Stage):
             MessageEventResult: 继续或停止事件处理的结果。
 
         """
+        # Plugins that listen to every group message wake those events too;
+        # only messages addressed to the bot should consume the quota. Private
+        # notices such as typing indicators wake with an empty chain and would
+        # otherwise crowd out the user's real messages.
+        if not event.is_at_or_wake_command or not event.get_messages():
+            return
+
         umo = event.unified_msg_origin
 
         async with self.locks[umo]:  # 确保同一会话不会并发修改队列
