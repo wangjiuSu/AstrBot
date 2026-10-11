@@ -4,6 +4,7 @@ import itertools
 import logging
 import time
 import uuid
+from collections import deque
 from collections.abc import Awaitable
 from typing import Any, cast
 
@@ -20,11 +21,15 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
+from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+
+OFFLINE_BACKLOG_MAX_AGE_SEC = 6 * 3600
+OFFLINE_BACKLOG_HISTORY_COUNT = 50
 
 
 @register_platform_adapter(
@@ -52,6 +57,12 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
             support_forward_message=True,
         )
+
+        # Newest OneBot message time seen per bot account, persisted so a
+        # restart knows where the offline gap starts.
+        self._last_message_time: dict[str, int] = {}
+        self._seen_message_ids: deque[str] = deque(maxlen=2000)
+        self._backlog_tasks: dict[str, asyncio.Task] = {}
 
         self.bot = CQHttp(
             use_ws_reverse=True,
@@ -104,8 +115,24 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_websocket_connection
-        def on_websocket_connection(_) -> None:
+        async def on_websocket_connection(event: Event) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
+            self_id = str(event.self_id)
+            running = self._backlog_tasks.get(self_id)
+            if running and not running.done():
+                return
+            since = self._last_message_time.get(self_id) or await sp.global_get(
+                f"aiocqhttp_last_message_time_{self.metadata.id}_{self_id}", 0
+            )
+            if not since:
+                # First run for this account: nothing to compare against.
+                return
+            self._backlog_tasks[self_id] = asyncio.create_task(
+                self._reply_offline_backlog(
+                    event.self_id,
+                    max(int(since), int(time.time()) - OFFLINE_BACKLOG_MAX_AGE_SEC),
+                )
+            )
 
     async def send_by_session(
         self,
@@ -448,6 +475,8 @@ class AiocqhttpAdapter(Platform):
     async def terminate(self) -> None:
         if hasattr(self, "shutdown_event"):
             self.shutdown_event.set()
+        for task in self._backlog_tasks.values():
+            task.cancel()
         await self._close_reverse_ws_connections()
 
     async def _close_reverse_ws_connections(self) -> None:
@@ -507,8 +536,158 @@ class AiocqhttpAdapter(Platform):
             bot=self.bot,
         )
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(message))
+    async def handle_msg(
+        self, message: AstrBotMessage, offline_backlog: dict | None = None
+    ) -> None:
+        """Commit a converted message and remember how far messages were handled.
+
+        Args:
+            message: Converted message.
+            offline_backlog: Set when the message was missed while offline.
+                ``sent_at`` is the original Unix time and ``earlier`` lists
+                older unanswered messages from the same sender.
+        """
+        raw = message.raw_message
+        if isinstance(raw, dict) and raw.get("post_type") == "message":
+            self._seen_message_ids.append(str(message.message_id))
+            sent_at = int(raw.get("time") or time.time())
+            if sent_at > self._last_message_time.get(message.self_id, 0):
+                self._last_message_time[message.self_id] = sent_at
+                await sp.global_put(
+                    f"aiocqhttp_last_message_time_{self.metadata.id}_{message.self_id}",
+                    sent_at,
+                )
+        event = self.create_event(message)
+        if offline_backlog:
+            event.set_extra("offline_backlog", offline_backlog)
+        self.commit_event(event)
+
+    async def _reply_offline_backlog(self, self_id: int | str, since: int) -> None:
+        """Replay mentions and private messages that arrived while offline.
+
+        NapCat does not resend events missed by a closed reverse WebSocket, so
+        recent chats are read back through its history API. Per sender, only
+        the newest unanswered message is replayed; older ones ride along as
+        ``earlier`` context. A chat counts as answered once the bot spoke in it.
+
+        Args:
+            self_id: Bot account that just connected.
+            since: Unix time of the last handled message, capped by
+                ``OFFLINE_BACKLOG_MAX_AGE_SEC``.
+        """
+        # Let live events from the new connection land first so they are
+        # recognised as already handled.
+        await asyncio.sleep(5)
+        bot_id = str(self_id)
+        try:
+            contacts = await self.bot.call_action(
+                action="get_recent_contact", count=50, self_id=self_id
+            )
+        except Exception as e:
+            logger.warning(
+                f"aiocqhttp: offline backlog skipped, get_recent_contact failed: {e}"
+            )
+            return
+
+        replayed = 0
+        for contact in contacts or []:
+            try:
+                if int(contact.get("msgTime") or 0) <= since:
+                    continue
+                peer = int(contact["peerUin"])
+                is_group = contact.get("chatType") == 2
+                if is_group:
+                    ret = await self.bot.call_action(
+                        action="get_group_msg_history",
+                        group_id=peer,
+                        count=OFFLINE_BACKLOG_HISTORY_COUNT,
+                        self_id=self_id,
+                    )
+                elif contact.get("chatType") == 1:
+                    ret = await self.bot.call_action(
+                        action="get_friend_msg_history",
+                        user_id=peer,
+                        count=OFFLINE_BACKLOG_HISTORY_COUNT,
+                        self_id=self_id,
+                    )
+                else:
+                    continue
+
+                history = sorted(
+                    (ret or {}).get("messages") or [], key=lambda m: m.get("time", 0)
+                )
+                bot_message_ids = {
+                    str(m.get("message_id"))
+                    for m in history
+                    if str(m.get("user_id")) == bot_id
+                }
+                pending: dict[str, list[dict]] = {}
+                for m in history:
+                    sender = str(m.get("user_id"))
+                    if sender == bot_id:
+                        pending.clear()
+                    elif str(m.get("message_id")) in self._seen_message_ids:
+                        pending.pop(sender, None)
+                    elif int(m.get("time") or 0) > since and (
+                        not is_group
+                        or any(
+                            (
+                                seg.get("type") == "at"
+                                and str(seg.get("data", {}).get("qq")) == bot_id
+                            )
+                            or (
+                                seg.get("type") == "reply"
+                                and str(seg.get("data", {}).get("id"))
+                                in bot_message_ids
+                            )
+                            for seg in m.get("message") or []
+                            if isinstance(seg, dict)
+                        )
+                    ):
+                        pending.setdefault(sender, []).append(m)
+
+                for messages in pending.values():
+                    latest = messages[-1]
+                    if str(latest.get("message_id")) in self._seen_message_ids:
+                        continue
+                    earlier = []
+                    for m in messages[:-1]:
+                        text = "".join(
+                            seg.get("data", {}).get("text", "")
+                            if seg.get("type") == "text"
+                            else f"[{seg.get('type')}]"
+                            for seg in m.get("message") or []
+                            if isinstance(seg, dict)
+                            and not (
+                                seg.get("type") == "at"
+                                and str(seg.get("data", {}).get("qq")) == bot_id
+                            )
+                        ).strip()
+                        minutes = max(1, (int(time.time()) - int(m["time"])) // 60)
+                        earlier.append(f"({minutes} min ago) {text}")
+
+                    ev = Event.from_payload({**latest, "post_type": "message"})
+                    if not ev:
+                        continue
+                    abm = await self.convert_message(ev)
+                    if not abm:
+                        continue
+                    abm.timestamp = int(latest["time"])
+                    await self.handle_msg(
+                        abm,
+                        offline_backlog={"sent_at": abm.timestamp, "earlier": earlier},
+                    )
+                    replayed += 1
+                    await asyncio.sleep(1)
+            except Exception as e:
+                logger.warning(
+                    f"aiocqhttp: offline backlog failed for {contact.get('peerUin')}: {e}"
+                )
+
+        if replayed:
+            logger.info(
+                f"aiocqhttp: replayed {replayed} offline message(s) for {bot_id}"
+            )
 
     def get_client(self) -> CQHttp:
         return self.bot

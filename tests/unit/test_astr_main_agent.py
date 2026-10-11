@@ -396,6 +396,22 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
+def test_append_system_reminders_marks_offline_backlog(mock_event):
+    req = ProviderRequest(prompt="hello?")
+    sent_at = datetime.datetime.now().timestamp() - 25 * 60
+    mock_event.get_extra.side_effect = lambda key, default=None: (
+        {"sent_at": sent_at, "earlier": ["(30 min ago) are you there"]}
+        if key == "offline_backlog"
+        else default
+    )
+
+    ama._append_system_reminders(mock_event, req, {}, None)
+
+    text = req.extra_user_content_parts[0].text
+    assert "sent 25 minutes ago" in text
+    assert "(30 min ago) are you there" in text
+
+
 def test_local_mode_prompt_uses_windows_powershell_51():
     with (
         patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),

@@ -991,6 +991,19 @@ def _append_system_reminders(
         weekday = WEEKDAY_NAMES[now.weekday()]
         system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
 
+    backlog = event.get_extra("offline_backlog")
+    if isinstance(backlog, dict) and backlog.get("sent_at"):
+        delay = datetime.datetime.now().timestamp() - backlog["sent_at"]
+        system_parts.append(
+            f"You were offline. This message was sent {max(1, int(delay // 60))} "
+            "minutes ago and you are only seeing it now."
+        )
+        if backlog.get("earlier"):
+            system_parts.append(
+                "Earlier unanswered messages from the same sender while you were "
+                "offline:\n" + "\n".join(backlog["earlier"])
+            )
+
     if system_parts:
         system_content = (
             "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
